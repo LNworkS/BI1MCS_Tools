@@ -11,10 +11,11 @@ bl_info = {
 }
 
 import bpy
+from bpy.props import EnumProperty
 from .classes.export_to_unreal_engine_operator import OBJECT_OT_custom_export, WM_OT_path_open
 from .classes.sphere_normals_operator import Generate_Spherical_Normals
 from .ui.export_to_unreal_engine import Export_to_Unreal_Engine_Panel, Export_to_Unreal_Engine_menu_func
-from .ui.spherical_normal import Generate_spherical_normal_panel
+from .ui.spherical_normal import Generate_spherical_normal_panel, get_materials
 
 all_classes = (
     OBJECT_OT_custom_export,
@@ -55,6 +56,12 @@ def register():
         default=True
     )
 
+    bpy.types.Scene.selected_material = EnumProperty(
+        name="材质列表",
+        description="可用材质列表",
+        items=get_materials
+    )
+
     for cls in all_classes:
         bpy.utils.register_class(cls)
 
@@ -65,6 +72,8 @@ def unregister():
         bpy.utils.unregister_class(cls)
 
     bpy.types.VIEW3D_MT_object_context_menu.remove(Export_to_Unreal_Engine_menu_func)
+
+    del bpy.types.Scene.selected_material
 
     del bpy.types.Scene.selected_checkbox
     del bpy.types.Scene.LOD_checkbox
