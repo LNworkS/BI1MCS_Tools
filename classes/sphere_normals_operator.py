@@ -1,5 +1,5 @@
 import bpy
-from ..functions.genarate_spherical_normal import Generate_spherical_normal
+from ..functions.generate_spherical_normal import generate_spherical_normal
 
 class Generate_Spherical_Normals(bpy.types.Operator):
     bl_idname = "mesh.generate_spherical_normal"
@@ -8,17 +8,19 @@ class Generate_Spherical_Normals(bpy.types.Operator):
 
     def execute(self, context):
         sel = bpy.context.selected_objects
-        if sel:
-            for obj in sel:     
-                if obj.type != "MESH":
-                    self.report({"WARNING"}, f"{obj.name}不是一个MESH")
-                    return {"FINISHED"}
-                if obj.modifiers:
-                    self.report({"WARNING"}, f"{obj.name}有修改器，请先应用")
-                    return {"FINISHED"}
-        else:
-            self.report({"WARNING"}, "没有选择物体")
+        if not sel:
+            self.report({"WARNING"}, "No object selected")
             return {"FINISHED"}
-        for obj in sel:
-            Generate_spherical_normal(obj)
+        
+        scene = context.scene
+        for obj in sel:     
+            if obj.type != "MESH":
+                self.report({"WARNING"}, f"{obj.name} is not a MESH")
+                continue
+            if obj.modifiers:
+                self.report({"WARNING"}, f"{obj.name} has modifiers; please apply them first")
+                continue
+            
+            generate_spherical_normal(obj, scene.active_tab, len(scene.material_dropdowns))
+        
         return {"FINISHED"}

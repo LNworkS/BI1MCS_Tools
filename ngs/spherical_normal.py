@@ -1,7 +1,82 @@
 import bpy
-from ..functions.get_materials import get_materials
 
-def spherical_normal_node_group(obj):
+def connect_input_with_nodelist(nodelist, node_group, nodeinput):
+    for i in range(len(nodelist)):
+        node_group.links.new(nodeinput.outputs[i+1], nodelist[i].inputs[0])
+
+def node_group_variable_part(node_type, node_num, node_group):
+    # interface
+    # Socket Material
+    socket_list = []
+    for index in range(node_num):
+        if node_type == 'MATERIAL':
+            socket = node_group.interface.new_socket(
+                name=f"Material {str(index)}", 
+                in_out='INPUT', 
+                socket_type='NodeSocketMaterial'
+            )
+        else:
+            socket = node_group.interface.new_socket(
+                name=f"Vertex Group {str(index)}", 
+                in_out='INPUT', 
+                socket_type='NodeSocketMaterial'
+            )
+        socket.attribute_domain = 'POINT'
+        socket.default_input = 'VALUE'
+        socket.structure_type = 'AUTO'
+        socket_list.append(socket)
+
+    # Initialize nodes
+    # Node Material Selection
+    variable_node_list = []
+    for index in range(node_num):
+        if node_type == 'Material':
+            variable_node = node_group.nodes.new("GeometryNodeMaterialSelection")
+            variable_node.name = "Material Selection"
+        else:
+            variable_node = node_group.nodes.new("GeometryNodeInputNamedAttribute")
+            variable_node.name = "Named Attribute"
+            variable_node.data_type = 'FLOAT'
+        variable_node_list.append(variable_node)
+
+    # Node Math
+    math_add_list = []
+    for index in range(node_num - 1):
+        math_add = node_group.nodes.new("ShaderNodeMath")
+        math_add.name = "Math Add.001"
+        math_add.operation = 'ADD'
+        math_add.use_clamp = False
+        math_add_list.append(math_add)
+
+    # Set locations
+    for variable_node in variable_node_list:
+        variable_node.location = (-369.6351013183594, -144.2990264892578)
+    for math_add in math_add_list:
+        math_add.location = (-369.6351013183594, -144.2990264892578)
+
+    # Set dimensions
+    for variable_node in variable_node_list:
+        variable_node.width, variable_node.height = 140.0, 100.0
+    for math_add in math_add_list:
+        math_add.width, math_add.height = 140.0, 100.0
+
+    # Initialize links
+    for i in range(len(math_add_list)):
+        current_node = math_add_list[i]
+        
+        if i == 0:
+            input1_source = variable_node_list[0]
+        else:
+            input1_source = math_add_list[i-1]
+        
+        input2_source = variable_node_list[i+1]
+        
+        node_group.links.new(input1_source.output[0], current_node.inputs[0])
+        node_group.links.new(input2_source.output[0], current_node.inputs[1])
+    
+    return [variable_node_list, math_add_list]
+
+def spherical_normal_base_node_group(obj, group_type, node_num):
     """Initialize spherical_normal node group"""
     spherical_normal = bpy.data.node_groups.new(type='GeometryNodeTree', name=obj.name + '_SN')
 
@@ -23,14 +98,6 @@ def spherical_normal_node_group(obj):
     geometry_socket_1.attribute_domain = 'POINT'
     geometry_socket_1.default_input = 'VALUE'
     geometry_socket_1.structure_type = 'AUTO'
-
-    # Socket Material
-    material_var = get_materials(obj, True)[0]
-    material_socket = spherical_normal.interface.new_socket(name="Material", in_out='INPUT', socket_type='NodeSocketMaterial')
-    material_socket.attribute_domain = 'POINT'
-    material_socket.default_input = 'VALUE'
-    material_socket.structure_type = 'AUTO'
-    material_socket.default_value = material_var
 
     # Socket Voxel Amount
     voxel_amount_socket = spherical_normal.interface.new_socket(name="Voxel Amount", in_out='INPUT', socket_type='NodeSocketFloat')
@@ -123,15 +190,10 @@ def spherical_normal_node_group(obj):
     # Position
     set_position.inputs[2].default_value = (0.0, 0.0, 0.0)
 
-    # Node Normal.001
-    normal_001 = spherical_normal.nodes.new("GeometryNodeInputNormal")
-    normal_001.name = "Normal.001"
-    normal_001.legacy_corner_normals = False
-
-    # Node Vector Math.001
-    vector_math_001 = spherical_normal.nodes.new("ShaderNodeVectorMath")
-    vector_math_001.name = "Vector Math.001"
-    vector_math_001.operation = 'SCALE'
+    # Node Vector Math Scale
+    vector_math_scale = spherical_normal.nodes.new("ShaderNodeVectorMath")
+    vector_math_scale.name = "Vector Math Scale.001"
+    vector_math_scale.operation = 'SCALE'
 
     # Node Self Object
     self_object = spherical_normal.nodes.new("GeometryNodeSelfObject")
@@ -144,11 +206,11 @@ def spherical_normal_node_group(obj):
     # As Instance
     object_info.inputs[1].default_value = False
 
-    # Node Math
-    math = spherical_normal.nodes.new("ShaderNodeMath")
-    math.name = "Math"
-    math.operation = 'DIVIDE'
-    math.use_clamp = False
+    # Node Math Divide
+    math_divide = spherical_normal.nodes.new("ShaderNodeMath")
+    math_divide.name = "Math Divide.001"
+    math_divide.operation = 'DIVIDE'
+    math_divide.use_clamp = False
 
     # Node Set Mesh Normal
     set_mesh_normal = spherical_normal.nodes.new("GeometryNodeSetMeshNormal")
@@ -156,39 +218,14 @@ def spherical_normal_node_group(obj):
     set_mesh_normal.domain = 'POINT'
     set_mesh_normal.mode = 'FREE'
 
-    # Node Material Selection
-    material_selection = spherical_normal.nodes.new("GeometryNodeMaterialSelection")
-    material_selection.name = "Material Selection"
-
     # Node Separate Geometry
     separate_geometry = spherical_normal.nodes.new("GeometryNodeSeparateGeometry")
     separate_geometry.name = "Separate Geometry"
     separate_geometry.domain = 'FACE'
 
-    # Node Reroute
-    reroute = spherical_normal.nodes.new("NodeReroute")
-    reroute.name = "Reroute"
-    reroute.socket_idname = "NodeSocketFloat"
-    # Node Reroute.002
-    reroute_002 = spherical_normal.nodes.new("NodeReroute")
-    reroute_002.name = "Reroute.002"
-    reroute_002.socket_idname = "NodeSocketFloat"
     # Node Join Geometry
     join_geometry = spherical_normal.nodes.new("GeometryNodeJoinGeometry")
     join_geometry.name = "Join Geometry"
-
-    # Node Reroute.001
-    reroute_001 = spherical_normal.nodes.new("NodeReroute")
-    reroute_001.name = "Reroute.001"
-    reroute_001.socket_idname = "NodeSocketGeometry"
-    # Node Vector Math.002
-    vector_math_002 = spherical_normal.nodes.new("ShaderNodeVectorMath")
-    vector_math_002.name = "Vector Math.002"
-    vector_math_002.operation = 'DIVIDE'
-    # Vector
-    vector_math_002.inputs[0].default_value = (0.0, 0.0, 0.0)
-    # Vector_001
-    vector_math_002.inputs[1].default_value = (0.0, 0.0, 0.0)
 
     # Set locations
     group_input.location = (-575.9725341796875, -94.01644134521484)
@@ -197,22 +234,16 @@ def spherical_normal_node_group(obj):
     volume_to_mesh.location = (284.0648498535156, -117.3414306640625)
     set_shade_smooth.location = (687.4033813476562, -120.7561264038086)
     capture_attribute.location = (874.5814208984375, -123.78326416015625)
-    normal.location = (689.4075317382812, -252.24679565429688)
     sample_nearest_surface.location = (1054.4169921875, -123.5376205444336)
     set_position.location = (503.54010009765625, -118.18453216552734)
-    normal_001.location = (129.6200714111328, -327.3133850097656)
-    vector_math_001.location = (307.43865966796875, -275.29083251953125)
+    normal.location = (129.6200714111328, -327.3133850097656)
+    vector_math_scale.location = (307.43865966796875, -275.29083251953125)
     self_object.location = (-232.7079620361328, -679.1368408203125)
     object_info.location = (-57.820106506347656, -544.0846557617188)
-    math.location = (131.13229370117188, -413.4574279785156)
+    math_divide.location = (131.13229370117188, -413.4574279785156)
     set_mesh_normal.location = (1253.0665283203125, 22.40302085876465)
-    material_selection.location = (-369.6351013183594, -144.2990264892578)
     separate_geometry.location = (-199.38050842285156, -24.342615127563477)
-    reroute.location = (-371.1038513183594, -242.91061401367188)
-    reroute_002.location = (-321.05108642578125, -521.8630981445312)
     join_geometry.location = (1429.03564453125, -72.3327865600586)
-    reroute_001.location = (36.58662033081055, -104.10609436035156)
-    vector_math_002.location = (507.13824462890625, -394.19317626953125)
 
     # Set dimensions
     group_input.width, group_input.height = 140.0, 100.0
@@ -224,73 +255,67 @@ def spherical_normal_node_group(obj):
     normal.width, normal.height = 140.0, 100.0
     sample_nearest_surface.width, sample_nearest_surface.height = 150.0, 100.0
     set_position.width, set_position.height = 140.0, 100.0
-    normal_001.width, normal_001.height = 140.0, 100.0
-    vector_math_001.width, vector_math_001.height = 140.0, 100.0
+    vector_math_scale.width, vector_math_scale.height = 140.0, 100.0
     self_object.width, self_object.height = 140.0, 100.0
     object_info.width, object_info.height = 140.0, 100.0
-    math.width, math.height = 140.0, 100.0
+    math_divide.width, math_divide.height = 140.0, 100.0
     set_mesh_normal.width, set_mesh_normal.height = 140.0, 100.0
-    material_selection.width, material_selection.height = 140.0, 100.0
     separate_geometry.width, separate_geometry.height = 140.0, 100.0
-    reroute.width, reroute.height = 12.5, 100.0
-    reroute_002.width, reroute_002.height = 12.5, 100.0
     join_geometry.width, join_geometry.height = 140.0, 100.0
-    reroute_001.width, reroute_001.height = 12.5, 100.0
-    vector_math_002.width, vector_math_002.height = 140.0, 100.0
-
-    # Initialize spherical_normal links
-
+    
+    variable_part = node_group_variable_part(group_type, node_num, spherical_normal)
+    variable_node_list, math_add_list = variable_part
+    
+    # group_input.Geometry -> separate_geometry.Geometry
+    spherical_normal.links.new(group_input.outputs[0], separate_geometry.inputs[0])
+    # group_input.variable part -> variable part.input
+    connect_input_with_nodelist(variable_node_list, spherical_normal, group_input)
+    # group_input.Voxel Amount -> mesh_to_volume.Voxel Amount
+    spherical_normal.links.new(group_input.outputs[node_num + 1], mesh_to_volume.inputs[3])
+    # group_input.Voxel Scale -> math_divide.Value
+    spherical_normal.links.new(group_input.outputs[node_num + 2], math_divide.inputs[0])
+    # variable part.output -> separate_geometry.Selection
+    if node_num == 1:
+        # connect first node
+        spherical_normal.links.new(variable_node_list[0].outputs[0], separate_geometry.inputs[1])
+    else:
+        # connect last Add node
+        spherical_normal.links.new(math_add_list[-1].outputs[0], separate_geometry.inputs[1])
+    # separate_geometry.Selection -> mesh_to_volume.Mesh
+    spherical_normal.links.new(separate_geometry.outputs[0], mesh_to_volume.inputs[0])
     # mesh_to_volume.Volume -> volume_to_mesh.Volume
     spherical_normal.links.new(mesh_to_volume.outputs[0], volume_to_mesh.inputs[0])
-    # set_shade_smooth.Geometry -> capture_attribute.Geometry
-    spherical_normal.links.new(set_shade_smooth.outputs[0], capture_attribute.inputs[0])
-    # normal_001.Normal -> vector_math_001.Vector
-    spherical_normal.links.new(normal_001.outputs[0], vector_math_001.inputs[0])
-    # self_object.Self Object -> object_info.Object
-    spherical_normal.links.new(self_object.outputs[0], object_info.inputs[0])
-    # vector_math_001.Vector -> set_position.Offset
-    spherical_normal.links.new(vector_math_001.outputs[0], set_position.inputs[3])
-    # object_info.Scale -> math.Value
-    spherical_normal.links.new(object_info.outputs[3], math.inputs[1])
-    # math.Value -> vector_math_001.Scale
-    spherical_normal.links.new(math.outputs[0], vector_math_001.inputs[3])
     # volume_to_mesh.Mesh -> set_position.Geometry
     spherical_normal.links.new(volume_to_mesh.outputs[0], set_position.inputs[0])
+    # self_object.Self Object -> object_info.Object
+    spherical_normal.links.new(self_object.outputs[0], object_info.inputs[0])
+    # object_info.Scale -> math_divide.Value
+    spherical_normal.links.new(object_info.outputs[3], math_divide.inputs[1])
+    # normal_001.Normal -> vector_math_scale.Vector
+    spherical_normal.links.new(normal.outputs[0], vector_math_scale.inputs[0])
+    # math_divide.Value -> vector_math_scale.Scale
+    spherical_normal.links.new(math_divide.outputs[0], vector_math_scale.inputs[3])
+    # vector_math_scale.Vector -> set_position.Offset
+    spherical_normal.links.new(vector_math_scale.outputs[0], set_position.inputs[3])
     # set_position.Geometry -> set_shade_smooth.Geometry
     spherical_normal.links.new(set_position.outputs[0], set_shade_smooth.inputs[0])
+    # set_shade_smooth.Geometry -> capture_attribute.Geometry
+    spherical_normal.links.new(set_shade_smooth.outputs[0], capture_attribute.inputs[0])
     # normal.Normal -> capture_attribute.Normal
     spherical_normal.links.new(normal.outputs[0], capture_attribute.inputs[1])
     # capture_attribute.Geometry -> sample_nearest_surface.Mesh
     spherical_normal.links.new(capture_attribute.outputs[0], sample_nearest_surface.inputs[0])
     # capture_attribute.Normal -> sample_nearest_surface.Value
     spherical_normal.links.new(capture_attribute.outputs[1], sample_nearest_surface.inputs[1])
-    # sample_nearest_surface.Value -> set_mesh_normal.Custom Normal
-    spherical_normal.links.new(sample_nearest_surface.outputs[0], set_mesh_normal.inputs[1])
-    # group_input.Geometry -> separate_geometry.Geometry
-    spherical_normal.links.new(group_input.outputs[0], separate_geometry.inputs[0])
-    # material_selection.Selection -> separate_geometry.Selection
-    spherical_normal.links.new(material_selection.outputs[0], separate_geometry.inputs[1])
-    # group_input.Material -> material_selection.Material
-    spherical_normal.links.new(group_input.outputs[1], material_selection.inputs[0])
-    # separate_geometry.Selection -> mesh_to_volume.Mesh
-    spherical_normal.links.new(separate_geometry.outputs[0], mesh_to_volume.inputs[0])
-    # group_input.Voxel Amount -> reroute.Input
-    spherical_normal.links.new(group_input.outputs[2], reroute.inputs[0])
-    # group_input.Voxel Scale -> reroute_002.Input
-    spherical_normal.links.new(group_input.outputs[3], reroute_002.inputs[0])
     # separate_geometry.Selection -> set_mesh_normal.Mesh
     spherical_normal.links.new(separate_geometry.outputs[0], set_mesh_normal.inputs[0])
-    # reroute.Output -> mesh_to_volume.Voxel Amount
-    spherical_normal.links.new(reroute.outputs[0], mesh_to_volume.inputs[3])
-    # reroute_001.Output -> join_geometry.Geometry
-    spherical_normal.links.new(reroute_001.outputs[0], join_geometry.inputs[0])
-    # separate_geometry.Inverted -> reroute_001.Input
-    spherical_normal.links.new(separate_geometry.outputs[1], reroute_001.inputs[0])
-    # join_geometry.Geometry -> group_output.Geometry
-    spherical_normal.links.new(join_geometry.outputs[0], group_output.inputs[0])
-    # reroute_002.Output -> math.Value
-    spherical_normal.links.new(reroute_002.outputs[0], math.inputs[0])
+    # sample_nearest_surface.Value -> set_mesh_normal.Custom Normal
+    spherical_normal.links.new(sample_nearest_surface.outputs[0], set_mesh_normal.inputs[1])
     # set_mesh_normal.Mesh -> join_geometry.Geometry
     spherical_normal.links.new(set_mesh_normal.outputs[0], join_geometry.inputs[0])
-
+    # separate_geometry.Inverted -> join_geometry.Geometry
+    spherical_normal.links.new(separate_geometry.outputs[1], join_geometry.inputs[0])
+    # join_geometry.Geometry -> group_output.Geometry
+    spherical_normal.links.new(join_geometry.outputs[0], group_output.inputs[0])
+    
     return spherical_normal
