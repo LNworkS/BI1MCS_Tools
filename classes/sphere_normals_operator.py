@@ -21,6 +21,10 @@ class Generate_Spherical_Normals(bpy.types.Operator):
                 self.report({"WARNING"}, f"{obj.name} has modifiers; please apply them first")
                 continue
             
-            generate_spherical_normal(obj, scene.active_tab, len(scene.material_dropdowns))
+            if scene.active_tab == "MATERIAL":
+                node_num = len(scene.material_dropdowns)
+            else:
+                node_num = len(scene.vertex_group_dropdowns)
+            generate_spherical_normal(obj, scene.active_tab, node_num)
         
         return {"FINISHED"}

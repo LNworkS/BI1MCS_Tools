@@ -1,10 +1,13 @@
 import bpy
 
-def connect_input_with_nodelist(nodelist, node_group, nodeinput):
+def connect_input_with_nodelist(nodelist, node_group, nodeinput, startid):
     for i in range(len(nodelist)):
-        node_group.links.new(nodeinput.outputs[i+1], nodelist[i].inputs[0])
+        node_group.links.new(nodeinput.outputs[i+startid], nodelist[i].inputs[0])
 
 def node_group_variable_part(node_type, node_num, node_group):
+    if node_num == 0:
+        return []
+
     # interface
     # Socket Material
     socket_list = []
@@ -30,7 +33,7 @@ def node_group_variable_part(node_type, node_num, node_group):
     # Node Material Selection
     variable_node_list = []
     for index in range(node_num):
-        if node_type == 'Material':
+        if node_type == 'MATERIAL':
             variable_node = node_group.nodes.new("GeometryNodeMaterialSelection")
             variable_node.name = "Material Selection"
         else:
@@ -130,6 +133,20 @@ def spherical_normal_base_node_group(obj, group_type, node_num):
     group_output.name = "Group Output"
     group_output.is_active_output = True
 
+    # Variable node group
+    variable_part = node_group_variable_part(group_type, node_num, spherical_normal)
+    if len(variable_part) != 0:
+        variable_node_list, math_add_list = variable_part
+
+        # Node Separate Geometry
+        separate_geometry = spherical_normal.nodes.new("GeometryNodeSeparateGeometry")
+        separate_geometry.name = "Separate Geometry"
+        separate_geometry.domain = 'FACE'
+
+        # Node Join Geometry
+        join_geometry = spherical_normal.nodes.new("GeometryNodeJoinGeometry")
+        join_geometry.name = "Join Geometry"
+
     # Node Mesh to Volume
     mesh_to_volume = spherical_normal.nodes.new("GeometryNodeMeshToVolume")
     mesh_to_volume.name = "Mesh to Volume"
@@ -218,15 +235,6 @@ def spherical_normal_base_node_group(obj, group_type, node_num):
     set_mesh_normal.domain = 'POINT'
     set_mesh_normal.mode = 'FREE'
 
-    # Node Separate Geometry
-    separate_geometry = spherical_normal.nodes.new("GeometryNodeSeparateGeometry")
-    separate_geometry.name = "Separate Geometry"
-    separate_geometry.domain = 'FACE'
-
-    # Node Join Geometry
-    join_geometry = spherical_normal.nodes.new("GeometryNodeJoinGeometry")
-    join_geometry.name = "Join Geometry"
-
     # Set locations
     group_input.location = (-575.9725341796875, -94.01644134521484)
     group_output.location = (1607.9554443359375, -70.9855728149414)
@@ -242,8 +250,9 @@ def spherical_normal_base_node_group(obj, group_type, node_num):
     object_info.location = (-57.820106506347656, -544.0846557617188)
     math_divide.location = (131.13229370117188, -413.4574279785156)
     set_mesh_normal.location = (1253.0665283203125, 22.40302085876465)
-    separate_geometry.location = (-199.38050842285156, -24.342615127563477)
-    join_geometry.location = (1429.03564453125, -72.3327865600586)
+    if len(variable_part) != 0:
+        separate_geometry.location = (-199.38050842285156, -24.342615127563477)
+        join_geometry.location = (1429.03564453125, -72.3327865600586)
 
     # Set dimensions
     group_input.width, group_input.height = 140.0, 100.0
@@ -260,29 +269,47 @@ def spherical_normal_base_node_group(obj, group_type, node_num):
     object_info.width, object_info.height = 140.0, 100.0
     math_divide.width, math_divide.height = 140.0, 100.0
     set_mesh_normal.width, set_mesh_normal.height = 140.0, 100.0
-    separate_geometry.width, separate_geometry.height = 140.0, 100.0
-    join_geometry.width, join_geometry.height = 140.0, 100.0
+    if len(variable_part) != 0:
+        separate_geometry.width, separate_geometry.height = 140.0, 100.0
+        join_geometry.width, join_geometry.height = 140.0, 100.0
     
-    variable_part = node_group_variable_part(group_type, node_num, spherical_normal)
-    variable_node_list, math_add_list = variable_part
-    
-    # group_input.Geometry -> separate_geometry.Geometry
-    spherical_normal.links.new(group_input.outputs[0], separate_geometry.inputs[0])
-    # group_input.variable part -> variable part.input
-    connect_input_with_nodelist(variable_node_list, spherical_normal, group_input)
     # group_input.Voxel Amount -> mesh_to_volume.Voxel Amount
-    spherical_normal.links.new(group_input.outputs[node_num + 1], mesh_to_volume.inputs[3])
+    spherical_normal.links.new(group_input.outputs[1], mesh_to_volume.inputs[3])
     # group_input.Voxel Scale -> math_divide.Value
-    spherical_normal.links.new(group_input.outputs[node_num + 2], math_divide.inputs[0])
-    # variable part.output -> separate_geometry.Selection
-    if node_num == 1:
-        # connect first node
-        spherical_normal.links.new(variable_node_list[0].outputs[0], separate_geometry.inputs[1])
+    spherical_normal.links.new(group_input.outputs[2], math_divide.inputs[0])
+    if len(variable_part) == 0:
+        # group_input.Geometry -> mesh_to_volume.Mesh
+        spherical_normal.links.new(group_input.outputs[0], mesh_to_volume.inputs[0])
+        # group_input.Geometry -> set_mesh_normal.Mesh
+        spherical_normal.links.new(group_input.outputs[0], set_mesh_normal.inputs[0])
+        # sample_nearest_surface.Value -> set_mesh_normal.Custom Normal
+        spherical_normal.links.new(sample_nearest_surface.outputs[0], set_mesh_normal.inputs[1])
+        # set_mesh_normal.Mesh -> group_output.Geometry
+        spherical_normal.links.new(set_mesh_normal.outputs[0], group_output.inputs[0])
     else:
-        # connect last Add node
-        spherical_normal.links.new(math_add_list[-1].outputs[0], separate_geometry.inputs[1])
-    # separate_geometry.Selection -> mesh_to_volume.Mesh
-    spherical_normal.links.new(separate_geometry.outputs[0], mesh_to_volume.inputs[0])
+        # group_input.Geometry -> separate_geometry.Geometry
+        spherical_normal.links.new(group_input.outputs[0], separate_geometry.inputs[0])
+        # group_input.variable part -> variable part.input
+        connect_input_with_nodelist(variable_node_list, spherical_normal, group_input, 3)
+        # variable part.output -> separate_geometry.Selection
+        if node_num == 1:
+            # connect first node
+            spherical_normal.links.new(variable_node_list[0].outputs[0], separate_geometry.inputs[1])
+        else:
+            # connect last Add node
+            spherical_normal.links.new(math_add_list[-1].outputs[0], separate_geometry.inputs[1])
+        # separate_geometry.Selection -> mesh_to_volume.Mesh
+        spherical_normal.links.new(separate_geometry.outputs[0], mesh_to_volume.inputs[0])
+        # separate_geometry.Selection -> set_mesh_normal.Mesh
+        spherical_normal.links.new(separate_geometry.outputs[0], set_mesh_normal.inputs[0])
+        # sample_nearest_surface.Value -> set_mesh_normal.Custom Normal
+        spherical_normal.links.new(sample_nearest_surface.outputs[0], set_mesh_normal.inputs[1])
+        # set_mesh_normal.Mesh -> join_geometry.Geometry
+        spherical_normal.links.new(set_mesh_normal.outputs[0], join_geometry.inputs[0])
+        # separate_geometry.Inverted -> join_geometry.Geometry
+        spherical_normal.links.new(separate_geometry.outputs[1], join_geometry.inputs[0])
+        # join_geometry.Geometry -> group_output.Geometry
+        spherical_normal.links.new(join_geometry.outputs[0], group_output.inputs[0])
     # mesh_to_volume.Volume -> volume_to_mesh.Volume
     spherical_normal.links.new(mesh_to_volume.outputs[0], volume_to_mesh.inputs[0])
     # volume_to_mesh.Mesh -> set_position.Geometry
@@ -307,15 +334,6 @@ def spherical_normal_base_node_group(obj, group_type, node_num):
     spherical_normal.links.new(capture_attribute.outputs[0], sample_nearest_surface.inputs[0])
     # capture_attribute.Normal -> sample_nearest_surface.Value
     spherical_normal.links.new(capture_attribute.outputs[1], sample_nearest_surface.inputs[1])
-    # separate_geometry.Selection -> set_mesh_normal.Mesh
-    spherical_normal.links.new(separate_geometry.outputs[0], set_mesh_normal.inputs[0])
-    # sample_nearest_surface.Value -> set_mesh_normal.Custom Normal
-    spherical_normal.links.new(sample_nearest_surface.outputs[0], set_mesh_normal.inputs[1])
-    # set_mesh_normal.Mesh -> join_geometry.Geometry
-    spherical_normal.links.new(set_mesh_normal.outputs[0], join_geometry.inputs[0])
-    # separate_geometry.Inverted -> join_geometry.Geometry
-    spherical_normal.links.new(separate_geometry.outputs[1], join_geometry.inputs[0])
-    # join_geometry.Geometry -> group_output.Geometry
-    spherical_normal.links.new(join_geometry.outputs[0], group_output.inputs[0])
+    
     
     return spherical_normal
