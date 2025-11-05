@@ -1,7 +1,7 @@
 bl_info = {
     "name": "BI1MCS Tools",
     "author": "BI1MCS",
-    "version": (0, 2, 1),
+    "version": (0, 2, 2),
     "blender": (4, 2, 0),
     "location": "View3D > Add > Mesh > New Object",
     "description": "Problem Feedback：WeChat BI1MCS",
@@ -11,15 +11,6 @@ bl_info = {
 }
 
 import bpy
-from .ui.export_to_unreal_engine import (
-    Export_to_Unreal_Engine_Panel, 
-    Export_to_Unreal_Engine_menu_func
-)
-from .ui.spherical_normal import (
-    MaterialDropdownItem,
-    VertexGroupDropdownItem,
-    Generate_spherical_normal_panel, 
-)
 from .classes.export_to_unreal_engine_operator import (
     OBJECT_OT_custom_export, 
     WM_OT_path_open
@@ -32,6 +23,15 @@ from .classes.sphere_normals_operator import (
     VERTEX_GROUP_OT_refresh_dropdowns,
     VERTEX_GROUP_OT_add_dropdown,
     VERTEX_GROUP_OT_remove_dropdown
+)
+from .ui.export_to_unreal_engine import (
+    Export_to_Unreal_Engine_Panel, 
+    Export_to_Unreal_Engine_menu_func
+)
+from .ui.spherical_normal import (
+    MaterialDropdownItem,
+    VertexGroupDropdownItem,
+    Generate_spherical_normal_panel, 
 )
 
 all_classes = (

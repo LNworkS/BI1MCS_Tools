@@ -9,12 +9,15 @@ def classification(isSelected, independentLod):
     
     if len(selected_objects) == 0:
         return [False, 'No selected object。', None]
-    
+
     export_list = []
 
     for obj in selected_objects:
         if obj.type not in ('MESH', 'EMPTY'):
             continue
+
+        if obj.mode == 'EDIT':
+            bpy.ops.object.mode_set(mode='OBJECT')
         
         if obj.type == 'EMPTY':
             if independentLod:
